@@ -1,0 +1,6 @@
+data
+.python-version
+# all __pycache__/
+__pycache__/
+venv/
+output/
