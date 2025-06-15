@@ -69,6 +69,9 @@ def main(args):
         df_tr["__split"] = "train"
         df["__split"] = "test"
         df = pd.concat([df_tr, df], ignore_index=True)
+        # remove target so NaNs in test portion don't wipe rows
+        if "price_actual" in df.columns:
+            df = df.drop(columns=["price_actual"])
     else:
         df["__split"] = args.split
 
