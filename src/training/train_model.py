@@ -1,13 +1,19 @@
 #!/usr/bin/env python
-"""Train ML model (LightGBM or XGBoost) with time‑series CV.
-Usage:
-  python -m src.training.train_model \
-      --cfg   src/config/lgbm_baseline.yaml \
-      --input data/train/train.pkl \
-      --model_dir output/models
+"""Train ML model (LightGBM or XGBoost) with time-series CV.
+
+This script now uses ``hydra`` for configuration. Each run is executed in a
+timestamped directory under ``outputs/`` and logs are stored automatically.
+
+Example::
+
+  python -m src.training.train_model cfg=src/config/lgbm_baseline.yaml
 """
-import argparse, yaml, joblib, math, re
+
+import yaml, joblib, math, re, logging
 from pathlib import Path
+import hydra
+from omegaconf import DictConfig
+from hydra.utils import to_absolute_path
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import TimeSeriesSplit
@@ -44,7 +50,9 @@ def train_fold(X_tr, y_tr, X_val, y_val, model_cls, params):
     return model, preds, rmse
 
 
-def main(cfg_path: str, input_path: str, model_dir: str):
+def run(cfg_path: str, input_path: str, model_dir: str):
+    logger = logging.getLogger(__name__)
+
     # 1. config & data ------------------------------------------------------
     cfg = yaml.safe_load(Path(cfg_path).read_text())
     df  = read_pickle(input_path)
@@ -85,26 +93,29 @@ def main(cfg_path: str, input_path: str, model_dir: str):
         )
         oof[val_idx] = preds
         model.save(models_path / f"{model_name}_fold{fold}.pkl")
-        print(f"Fold {fold}: RMSE = {rmse_fold:.4f}")
+        logger.info("Fold %d: RMSE = %.4f", fold, rmse_fold)
 
     # 6. overall CV score ---------------------------------------------------
     rmse_oof = math.sqrt(mean_squared_error(y, oof))
-    print(f"OOF RMSE: {rmse_oof:.4f}")
+    logger.info("OOF RMSE: %.4f", rmse_oof)
 
     # 7. retrain on full data ----------------------------------------------
     final_model = model_cls(model_params)
     final_model.fit(X, y, valid=(X, y))
     final_model.save(models_path / "model.pkl")
     joblib.dump(cfg, models_path / "train_config.pkl")
-    print("Training complete. Models saved to", models_path)
+    logger.info("Training complete. Models saved to %s", models_path)
 
 # ---------------------------------------------------------------------------
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--cfg", type=Path, required=True)
-    parser.add_argument("--input", type=Path, required=True)
-    parser.add_argument("--model_dir", type=Path, required=True)
-    args = parser.parse_args()
+@hydra.main(config_path="../../conf", config_name="config", version_base=None)
+def main(cfg: DictConfig) -> None:
+    """Entry point for Hydra."""
+    run(
+        to_absolute_path(cfg.cfg),
+        to_absolute_path(cfg.input),
+        cfg.model_dir,
+    )
 
-    main(str(args.cfg), str(args.input), str(args.model_dir))
+if __name__ == "__main__":
+    main()
 

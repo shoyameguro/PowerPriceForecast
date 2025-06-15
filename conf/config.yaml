@@ -1,0 +1,7 @@
+cfg: src/config/lgbm_baseline.yaml
+input: data/train/train.pkl
+model_dir: models
+
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
