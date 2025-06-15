@@ -1,0 +1,20 @@
+model_name: nlinear
+random_state: 42
+seed: 42
+
+# Darts NLinear parameters
+params:
+  input_chunk_length: 168
+  output_chunk_length: 24
+  n_epochs: 50
+
+# Exclude only obvious non-numeric columns
+features_exclude:
+  - time
+  - timestamp
+  - price_actual
+  - regex:^price_actual_.*$
+
+cv:
+  n_splits: 3
+  test_hours: 720
