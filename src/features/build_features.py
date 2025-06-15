@@ -58,11 +58,37 @@ def add_rolling(df: pd.DataFrame) -> pd.DataFrame:
 
 def main(args):
     df = pd.read_csv(args.input)
+
+    # If we are preparing test features and a training file is provided,
+    # prepend the last week of training data so that lag/rolling features
+    # can be computed without losing the first test rows.
+    if args.split == "test" and args.train is not None:
+        df_tr = pd.read_csv(args.train)
+        window = max(DEF_LAGS)
+        df_tr = df_tr.tail(window)
+        df_tr["__split"] = "train"
+        df["__split"] = "test"
+        df = pd.concat([df_tr, df], ignore_index=True)
+        # remove target so NaNs in test portion don't wipe rows
+        if "price_actual" in df.columns:
+            df = df.drop(columns=["price_actual"])
+    else:
+        df["__split"] = args.split
+
     df = add_time_features(df)
     df = add_lag_features(df, DEF_LAGS)
     df = add_rolling(df)
-    # drop rows with NaNs created by lagging
+
+    # drop rows with NaNs created by lagging/rolling
     df = df.dropna().reset_index(drop=True)
+
+    # if extra training rows were prepended, keep only test part
+    if "__split" in df.columns and args.split == "test":
+        df = df[df["__split"] == "test"].reset_index(drop=True)
+        df = df.drop(columns=["__split"])
+    elif "__split" in df.columns:
+        df = df.drop(columns=["__split"])
+
     from src.utils.io import save_data
     save_data(df, args.split)
 
@@ -70,5 +96,6 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--input", type=Path, required=True)
     p.add_argument("--split", type=str, choices=["train", "test"], required=True)
+    p.add_argument("--train", type=Path, help="Path to raw training CSV used for computing initial lags in test mode")
     args = p.parse_args()
     main(args)
