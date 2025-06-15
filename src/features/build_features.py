@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """Feature engineering pipeline.
-Usage:  python -m src.features.build_features --input data/raw/train.csv --output data/processed/train.feather
+Usage:  python -m src.features.build_features --input data/raw/train.csv --split train
+Results are saved to ``data/<split>/<split>.pkl`` via :func:`save_data`.
 """
 import argparse
 from pathlib import Path
