@@ -8,7 +8,8 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 
-from src.utils.io import read_data
+
+from src.utils.io import read_data, read_pickle
 from src.models.lgbm_model import LGBMWrapper
 
 
@@ -24,7 +25,14 @@ def load_models(path: Path):
 
 def main(args):
     # 1) データ読み込み
-    df = read_data("test") if args.input is None else pd.read_feather(args.input)
+    if args.input is None:
+        df = read_data("test")
+    else:
+        # autodetect pickle vs feather
+        if str(args.input).endswith(".pkl"):
+            df = read_pickle(args.input)
+        else:
+            df = pd.read_feather(args.input)
 
     # 2) モデル側メタデータを先に読み出す
     model0 = load_models(Path(args.models))[0]      # 1個取れば列情報は分かる
