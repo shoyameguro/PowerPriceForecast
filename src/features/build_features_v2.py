@@ -160,8 +160,11 @@ def build_features(df: pd.DataFrame, split: str, df_tr_tail: pd.DataFrame | None
     df = add_diff_pct(df, NUM_DIFF_COLS)
     df = add_generation_shares(df)
 
-    # Remove rows with NaNs induced by shifting/rolling
-    df = df.dropna().reset_index(drop=True)
+    # Remove rows with NaNs induced by shifting/rolling for training only.
+    # Test split keeps missing values so prediction rows aren't discarded and
+    # LightGBM can handle them natively.
+    if split == "train":
+        df = df.dropna().reset_index(drop=True)
 
     # Keep only test rows if we prepended history
     if "__origin" in df.columns:
