@@ -26,4 +26,4 @@ params:
 cv:
   n_splits: 5            # TimeSeriesSplit 分割数
   test_hours: 720        # 各 fold の検証期間 (30 日)
-  early_stopping_rounds: 100
+  early_stopping_rounds: 50

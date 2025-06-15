@@ -40,7 +40,7 @@ class LGBMWrapper:
         self.model = lgb.train(
             params=self.params,
             train_set=train_set,
-            num_boost_round=5000,
+            num_boost_round=1000,
             valid_sets=[val_set],
             callbacks=callbacks,
         )

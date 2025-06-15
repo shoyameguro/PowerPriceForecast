@@ -82,7 +82,7 @@ def main(args):
     df = add_rolling(df)
 
     # drop rows with NaNs created by lagging/rolling
-    df = df.dropna().reset_index(drop=True)
+    # df = df.dropna().reset_index(drop=True)
 
     # if extra training rows were prepended, keep only test part
     if "__split" in df.columns and args.split == "test":
