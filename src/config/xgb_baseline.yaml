@@ -1,0 +1,25 @@
+model_name: xgb
+random_state: 42
+seed: 42
+
+target_col: price_actual
+
+features_exclude:
+  - time
+  - timestamp
+  - price_actual
+  - regex:^price_actual_.*$
+
+params:
+  objective: reg:squarederror
+  learning_rate: 0.05
+  max_depth: 8
+  subsample: 0.8
+  colsample_bytree: 0.8
+  n_estimators: 1000
+
+cv:
+  n_splits: 5
+  test_hours: 720
+  early_stopping_rounds: 50
+
