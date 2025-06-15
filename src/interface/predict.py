@@ -9,12 +9,16 @@ import pandas as pd
 import numpy as np
 
 from src.utils.io import read_data
+from src.models.lgbm_model import LGBMWrapper
 
 
 def load_models(path: Path):
-    models = []
+    """Load all LightGBM wrapper models from the given directory."""
+    models: list[LGBMWrapper] = []
     for p in glob.glob(str(path / "lgbm_fold*.pkl")):
-        models.append(joblib.load(p))
+        wrapper = LGBMWrapper(params={})
+        wrapper.load(Path(p))
+        models.append(wrapper)
     return models
 
 
