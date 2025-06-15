@@ -1,6 +1,13 @@
-cfg: src/config/lgbm_baseline.yaml
-input: data/train/train.pkl
-model_dir: models
+# conf/config.yaml
+defaults:
+  - _self_
+
+# -- 学習用ファイルと設定 --
+cfg:   src/config/lgbm_baseline.yaml   # ← 相対パスのまま
+input: data/train/train.pkl            # ← 相対パスのまま
+
+# run フォルダ内の models/ に出力させる
+model_dir: ${hydra:runtime.output_dir}/models
 
 hydra:
   run:
