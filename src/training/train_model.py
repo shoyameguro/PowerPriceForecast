@@ -49,14 +49,15 @@ def main(cfg_path: str, input_path: str, model_dir: str):
     cfg = yaml.safe_load(Path(cfg_path).read_text())
     df  = read_pickle(input_path)
 
-    # 2. column exclusions --------------------------------------------------
-    df = drop_by_patterns(df, cfg.get("features_exclude", []))
+    # 2. target & feature separation ---------------------------------------
     target_col = cfg.get("target_col", "price_actual")
-
     y = df[target_col]
     X = df.drop(columns=[target_col])
 
-    # 3. CV setup -----------------------------------------------------------
+    # 3. column exclusions --------------------------------------------------
+    X = drop_by_patterns(X, cfg.get("features_exclude", []))
+
+    # 4. CV setup -----------------------------------------------------------
     n_splits = cfg.get("cv", {}).get("n_splits", 3)
     test_hours = cfg.get("cv", {}).get("test_hours", None)
     tss_kwargs = {"n_splits": n_splits}
@@ -65,7 +66,7 @@ def main(cfg_path: str, input_path: str, model_dir: str):
         tss_kwargs["test_size"] = test_hours
     tss = TimeSeriesSplit(**tss_kwargs)
 
-    # 4. train folds --------------------------------------------------------
+    # 5. train folds --------------------------------------------------------
     oof = np.zeros(len(df))
     models_path = Path(model_dir)
     models_path.mkdir(parents=True, exist_ok=True)
@@ -81,11 +82,11 @@ def main(cfg_path: str, input_path: str, model_dir: str):
         model.save(models_path / f"lgbm_fold{fold}.pkl")
         print(f"Fold {fold}: RMSE = {rmse_fold:.4f}")
 
-    # 5. overall CV score ---------------------------------------------------
+    # 6. overall CV score ---------------------------------------------------
     rmse_oof = math.sqrt(mean_squared_error(y, oof))
     print(f"OOF RMSE: {rmse_oof:.4f}")
 
-    # 6. retrain on full data ----------------------------------------------
+    # 7. retrain on full data ----------------------------------------------
     final_model = LGBMWrapper(lgb_params)
     final_model.fit(X, y, valid=(X, y))
     final_model.save(models_path / "model.pkl")
