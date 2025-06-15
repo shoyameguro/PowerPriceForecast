@@ -1,0 +1,6 @@
+models: models
+input: null
+out: output/submissions/submission.csv
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
