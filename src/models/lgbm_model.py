@@ -60,6 +60,7 @@ class LGBMWrapper:
     # ---------- persistence ----------
     def save(self, path: Path):
         obj = {
+            "model_type": "lgbm",
             "booster": self.model,
             "feature_names": self.feature_names,
             "categorical_cols": self.categorical_cols,
@@ -71,3 +72,4 @@ class LGBMWrapper:
         self.model = d["booster"]
         self.feature_names = d["feature_names"]
         self.categorical_cols = d["categorical_cols"]
+

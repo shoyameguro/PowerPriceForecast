@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Train LightGBM model with time‑series CV.
+"""Train ML model (LightGBM or XGBoost) with time‑series CV.
 Usage:
   python -m src.training.train_model \
       --cfg   src/config/lgbm_baseline.yaml \
@@ -14,7 +14,7 @@ from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import mean_squared_error
 
 from src.utils.io import read_pickle
-from src.models.lgbm_model import LGBMWrapper
+from src.models import MODEL_REGISTRY
 
 # ---------------------------------------------------------------------------
 # Utility
@@ -35,9 +35,9 @@ def drop_by_patterns(df: pd.DataFrame, patterns: list[str]) -> pd.DataFrame:
 # Main logic
 # ---------------------------------------------------------------------------
 
-def train_fold(X_tr, y_tr, X_val, y_val, lgb_params):
+def train_fold(X_tr, y_tr, X_val, y_val, model_cls, params):
     """Train one fold and return fitted model plus validation preds."""
-    model = LGBMWrapper(lgb_params)
+    model = model_cls(params)
     model.fit(X_tr, y_tr, valid=(X_val, y_val))
     preds = model.predict(X_val)
     rmse = math.sqrt(mean_squared_error(y_val, preds))
@@ -71,15 +71,20 @@ def main(cfg_path: str, input_path: str, model_dir: str):
     models_path = Path(model_dir)
     models_path.mkdir(parents=True, exist_ok=True)
 
-    lgb_params = cfg["params"].copy()
-    lgb_params["early_stopping_rounds"] = cfg.get("cv", {}).get("early_stopping_rounds", 100)
+    model_name = cfg.get("model_name", "lgbm")
+    model_cls = MODEL_REGISTRY.get(model_name)
+    if model_cls is None:
+        raise ValueError(f"Unknown model_name: {model_name}")
+
+    model_params = cfg["params"].copy()
+    model_params["early_stopping_rounds"] = cfg.get("cv", {}).get("early_stopping_rounds", 100)
 
     for fold, (tr_idx, val_idx) in enumerate(tss.split(X)):
         model, preds, rmse_fold = train_fold(
-            X.iloc[tr_idx], y.iloc[tr_idx], X.iloc[val_idx], y.iloc[val_idx], lgb_params
+            X.iloc[tr_idx], y.iloc[tr_idx], X.iloc[val_idx], y.iloc[val_idx], model_cls, model_params
         )
         oof[val_idx] = preds
-        model.save(models_path / f"lgbm_fold{fold}.pkl")
+        model.save(models_path / f"{model_name}_fold{fold}.pkl")
         print(f"Fold {fold}: RMSE = {rmse_fold:.4f}")
 
     # 6. overall CV score ---------------------------------------------------
@@ -87,7 +92,7 @@ def main(cfg_path: str, input_path: str, model_dir: str):
     print(f"OOF RMSE: {rmse_oof:.4f}")
 
     # 7. retrain on full data ----------------------------------------------
-    final_model = LGBMWrapper(lgb_params)
+    final_model = model_cls(model_params)
     final_model.fit(X, y, valid=(X, y))
     final_model.save(models_path / "model.pkl")
     joblib.dump(cfg, models_path / "train_config.pkl")
@@ -102,3 +107,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(str(args.cfg), str(args.input), str(args.model_dir))
+

@@ -10,15 +10,18 @@ import numpy as np
 
 
 from src.utils.io import read_data, read_pickle
-from src.models.lgbm_model import LGBMWrapper
+from src.models import MODEL_REGISTRY, LGBMWrapper
 
 
 def load_models(path: Path):
-    """Load all LightGBM wrapper models from the given directory."""
-    models: list[LGBMWrapper] = []
-    for p in glob.glob(str(path / "lgbm_fold*.pkl")):
-        wrapper = LGBMWrapper(params={})
-        wrapper.load(Path(p))
+    """Load all CV fold models from directory regardless of type."""
+    models = []
+    for p in sorted(path.glob("*_fold*.pkl")):
+        meta = joblib.load(p)
+        model_type = meta.get("model_type", "lgbm")
+        cls = MODEL_REGISTRY.get(model_type, LGBMWrapper)
+        wrapper = cls(params={})
+        wrapper.load(p)
         models.append(wrapper)
     return models
 
@@ -60,3 +63,4 @@ if __name__ == "__main__":
     p.add_argument("--input", type=Path)
     p.add_argument("--out", type=Path, required=True)
     main(p.parse_args())
+
