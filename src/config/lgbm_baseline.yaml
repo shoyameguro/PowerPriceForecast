@@ -8,6 +8,8 @@ target_col: price_actual
 features_exclude:
   - time
   - timestamp   # raw datetime column removed before modeling
+  - price_actual               # 目的変数そのもの
+  - regex:^price_actual_.*$    # ラグ・移動統計も全部除外（正規表現）
 
 params:
   objective: rmse

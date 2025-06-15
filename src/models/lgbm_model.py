@@ -1,28 +1,36 @@
 from pathlib import Path
 import joblib
 import lightgbm as lgb
+import pandas as pd
+
 
 class LGBMWrapper:
-    """LightGBM Booster wrapper (v4+)."""
+    """LightGBM Booster wrapper (v4+) that stores feature / category info."""
 
     def __init__(self, params: dict):
         self.params = params.copy()
         self.model: lgb.Booster | None = None
+        self.feature_names: list[str] | None = None
+        self.categorical_cols: list[str] | None = None
 
-    def _ensure_category(self, X):
-        obj_cols = X.select_dtypes(include=["object"]).columns
-        if len(obj_cols):
-            X[obj_cols] = X[obj_cols].astype("category")
-        return X
+    # ---------- private ----------
+    @staticmethod
+    def _to_category(df: pd.DataFrame, cat_cols: list[str]) -> pd.DataFrame:
+        for c in cat_cols:
+            if c in df.columns and not pd.api.types.is_categorical_dtype(df[c]):
+                df[c] = df[c].astype("category")
+        return df
 
     # ---------- train ----------
     def fit(self, X, y, valid):
-        X = self._ensure_category(X.copy())
-        X_val = self._ensure_category(valid[0].copy())
-        y_val = valid[1]
+        # 1) オブジェクト型 → category
+        obj_cols = X.select_dtypes(include=["object"]).columns.tolist()
+        X = self._to_category(X.copy(), obj_cols)
+        X_val = self._to_category(valid[0].copy(), obj_cols)
 
+        # 2) LightGBM 学習
         train_set = lgb.Dataset(X, y)
-        val_set   = lgb.Dataset(X_val, y_val)
+        val_set   = lgb.Dataset(X_val, valid[1])
 
         callbacks = [lgb.log_evaluation(period=100)]
         early = self.params.pop("early_stopping_rounds", None)
@@ -37,14 +45,29 @@ class LGBMWrapper:
             callbacks=callbacks,
         )
 
+        # 3) 後で合わせるために列情報を保持
+        self.feature_names = X.columns.tolist()
+        self.categorical_cols = obj_cols
+
     # ---------- predict ----------
     def predict(self, X):
-        X = self._ensure_category(X.copy())
+        # 1) 列順を学習時に合わせる
+        X = X.reindex(columns=self.feature_names, copy=False)
+        # 2) dtype も同期
+        X = self._to_category(X.copy(), self.categorical_cols)
         return self.model.predict(X, num_iteration=self.model.best_iteration)
 
     # ---------- persistence ----------
     def save(self, path: Path):
-        joblib.dump(self.model, path)
+        obj = {
+            "booster": self.model,
+            "feature_names": self.feature_names,
+            "categorical_cols": self.categorical_cols,
+        }
+        joblib.dump(obj, path)
 
     def load(self, path: Path):
-        self.model = joblib.load(path)
+        d = joblib.load(path)
+        self.model = d["booster"]
+        self.feature_names = d["feature_names"]
+        self.categorical_cols = d["categorical_cols"]

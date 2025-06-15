@@ -19,11 +19,24 @@ def load_models(path: Path):
 
 
 def main(args):
+    # 1) データ読み込み
     df = read_data("test") if args.input is None else pd.read_feather(args.input)
-    cfg = joblib.load(Path(args.models) / "train_config.pkl")
-    X = df.drop(columns=cfg["features_exclude"] + [cfg["target_col"]])
-    models = load_models(Path(args.models))
+
+    # 2) モデル側メタデータを先に読み出す
+    model0 = load_models(Path(args.models))[0]      # 1個取れば列情報は分かる
+    feature_names = model0.feature_names
+
+    # 3) 列をモデル順に並べ替え・欠損列はゼロ埋め
+    X = df.reindex(columns=feature_names, copy=True)
+    missing = X.columns[X.isnull().all()]
+    if len(missing):
+        X[missing] = 0.0
+
+    # 4) すべてのモデルで平均
+    models = [model0] + load_models(Path(args.models))[1:]
     preds = np.mean([m.predict(X) for m in models], axis=0)
+
+    # 5) 提出ファイル
     sub = pd.DataFrame({"time": df["time"], "price_actual": preds})
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     sub.to_csv(args.out, index=False)

@@ -13,7 +13,7 @@ ES_HOL = holidays.country_holidays("ES")
 DEF_LAGS = [1, 2, 24, 168]  # hours
 
 # lag/rolling を取る候補列は run-time に決定 (train は price_actual を含むが test には無い)
-NUM_COLS_BASE = ["total_load_actual", "price_actual"]
+NUM_COLS_BASE = ["total_load_actual"]
 
 
 def add_time_features(df: pd.DataFrame) -> pd.DataFrame:
