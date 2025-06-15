@@ -51,7 +51,7 @@ def main(args):
     # 5) 提出ファイル
     sub = pd.DataFrame({"time": df["time"], "price_actual": preds})
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-    sub.to_csv(args.out, index=False)
+    sub.to_csv(args.out, index=False, header=False)
     print("Saved submission to", args.out)
 
 if __name__ == "__main__":
