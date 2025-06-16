@@ -115,6 +115,10 @@ def run(cfg_path: str, input_path: str, model_dir: Path, cv_stage: str, cv_overr
     model_params["early_stopping_rounds"] = cv_conf.get("early_stopping_rounds", 100)
 
     for fold, (tr_idx, val_idx) in enumerate(tss.split(X)):
+        if len(tr_idx) == 0:
+            logger.warning("Skipping fold %d because training set is empty", fold)
+            continue
+
         model, preds, rmse_fold = train_fold(
             X.iloc[tr_idx],
             y.iloc[tr_idx],
