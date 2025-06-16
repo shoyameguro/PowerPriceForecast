@@ -1,0 +1,6 @@
+cv_stage: stage1
+cv:
+  name: purged_walk
+  n_splits: 30
+  test_hours: 744
+  gap_hours: 168

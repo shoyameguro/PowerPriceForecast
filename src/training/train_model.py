@@ -26,7 +26,8 @@ import yaml
 from hydra.utils import to_absolute_path
 from omegaconf import DictConfig
 from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import TimeSeriesSplit
+
+from src.utils.cv import build_cv
 
 from src.models import MODEL_REGISTRY
 from src.utils.io import read_pickle
@@ -67,11 +68,14 @@ def train_fold(
     return model, preds, rmse
 
 
-def run(cfg_path: str, input_path: str, model_dir: Path):
+def run(cfg_path: str, input_path: str, model_dir: Path, cv_stage: str, cv_override: dict | None = None):
     logger = logging.getLogger(__name__)
 
     # 1. Load config & data -------------------------------------------------
     cfg = yaml.safe_load(Path(cfg_path).read_text())
+    if cv_override:
+        cfg["cv"] = {**cfg.get("cv", {}), **cv_override}
+    cfg["cv_stage"] = cv_stage
     df = read_pickle(input_path)
 
     # 2. Target & feature separation --------------------------------------
@@ -84,10 +88,7 @@ def run(cfg_path: str, input_path: str, model_dir: Path):
 
     # 4. CV setup -----------------------------------------------------------
     cv_conf = cfg.get("cv", {})
-    tss_kwargs = {"n_splits": cv_conf.get("n_splits", 3)}
-    if (test_hours := cv_conf.get("test_hours")):
-        tss_kwargs["test_size"] = test_hours  # 1 h = 1 row
-    tss = TimeSeriesSplit(**tss_kwargs)
+    tss = build_cv(cv_conf)
 
     # 5. Train folds --------------------------------------------------------
     oof = np.zeros(len(df))
@@ -102,6 +103,10 @@ def run(cfg_path: str, input_path: str, model_dir: Path):
     model_params["early_stopping_rounds"] = cv_conf.get("early_stopping_rounds", 100)
 
     for fold, (tr_idx, val_idx) in enumerate(tss.split(X)):
+        if len(tr_idx) == 0:
+            logger.warning("Skipping fold %d because training set is empty", fold)
+            continue
+
         model, preds, rmse_fold = train_fold(
             X.iloc[tr_idx],
             y.iloc[tr_idx],
@@ -112,7 +117,7 @@ def run(cfg_path: str, input_path: str, model_dir: Path):
         )
         oof[val_idx] = preds
         model.save(model_dir / f"{model_name}_fold{fold}.pkl")
-        logger.info("Fold %d: RMSE = %.4f", fold, rmse_fold)
+        logger.info("fold_%d_rmse = %.4f", fold, rmse_fold)
 
     # 6. Overall CV score ---------------------------------------------------
     rmse_oof = math.sqrt(mean_squared_error(y, oof))
@@ -137,6 +142,8 @@ def main(cfg: DictConfig) -> None:  # noqa: D401
         to_absolute_path(cfg.cfg),          # original YAML
         to_absolute_path(cfg.input),        # training data
         Path(cfg.model_dir).resolve(),      # already mapped inside outputs/
+        cfg.get("cv_stage", "stage1"),
+        cfg.get("cv", {}),
     )
 
 

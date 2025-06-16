@@ -73,3 +73,9 @@ class LGBMWrapper:
         self.feature_names = d["feature_names"]
         self.categorical_cols = d["categorical_cols"]
 
+    def get_importance(self, importance_type: str = "gain"):
+        if self.model is None:
+            raise ValueError("Model not trained")
+        imps = self.model.feature_importance(importance_type=importance_type)
+        return pd.Series(imps, index=self.feature_names)
+

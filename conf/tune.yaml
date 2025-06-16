@@ -1,15 +1,18 @@
 # conf/tune.yaml
 defaults:
   - _self_
+  - cv_stage: stage1
+  - feature_select: none
 
 # ---- 対象モデル設定とデータ --------------------------------------------
-cfg:   src/config/lgbm_baseline.yaml      # これを軸にパラメータを探索
-input: data/train/train.pkl               # 学習データ
+cfg: src/config/lgbm_baseline.yaml
+input: data/train/train.pkl
 
 # ---- Optuna 設定 --------------------------------------------------------
-trials: 100                               # 探索回数は CLI で上書き可
-out: ${hydra:runtime.output_dir}/tuning   # この run 内に成果物を集約
+trials: 100
+out: ${hydra:runtime.output_dir}/tuning
 
 hydra:
   run:
     dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+

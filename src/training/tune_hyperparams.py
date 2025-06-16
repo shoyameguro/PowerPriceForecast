@@ -36,11 +36,50 @@ import yaml
 from hydra.utils import to_absolute_path
 from omegaconf import DictConfig
 from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import TimeSeriesSplit
+
+from src.utils.cv import build_cv
 
 from src.models import MODEL_REGISTRY
 from src.utils.io import read_pickle
 from src.training.train_model import drop_by_patterns
+
+
+def select_features_optuna(
+    X: pd.DataFrame,
+    y: pd.Series,
+    tss,
+    model_name: str,
+    params: dict,
+    n_trials: int,
+) -> list[str]:
+    """Return list of selected columns via Optuna."""
+    model_cls = MODEL_REGISTRY[model_name]
+    base_model = model_cls(params)
+    base_model.fit(X, y, valid=(X, y))
+    order = base_model.get_importance().sort_values(ascending=False).index.tolist()
+
+    def objective(trial: optuna.Trial) -> float:
+        k = trial.suggest_int("num_features", max(1, len(order) // 10), len(order))
+        cols = order[:k]
+        rmses = []
+        for tr_idx, val_idx in tss.split(X):
+            if len(tr_idx) == 0:
+                continue
+            model = model_cls(params)
+            model.fit(
+                X.loc[tr_idx, cols],
+                y.iloc[tr_idx],
+                valid=(X.loc[val_idx, cols], y.iloc[val_idx]),
+            )
+            preds = model.predict(X.loc[val_idx, cols])
+            rmse = math.sqrt(mean_squared_error(y.iloc[val_idx], preds))
+            rmses.append(rmse)
+        trial.set_user_attr("cols", cols)
+        return float(np.mean(rmses))
+
+    study = optuna.create_study(direction="minimize", study_name="feature_select")
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+    return study.best_trial.user_attrs["cols"]
 
 # ---------------------------------------------------------------------------
 # Logging setup -------------------------------------------------------------
@@ -103,6 +142,8 @@ def make_objective(X, y, tss, model_name: str, base_params: dict):
         params["early_stopping_rounds"] = base_params.get("early_stopping_rounds", 50)
         rmses = []
         for tr_idx, val_idx in tss.split(X):
+            if len(tr_idx) == 0:
+                continue
             model = model_cls(params)
             model.fit(X.iloc[tr_idx], y.iloc[tr_idx], valid=(X.iloc[val_idx], y.iloc[val_idx]))
             preds = model.predict(X.iloc[val_idx])
@@ -119,9 +160,19 @@ def make_objective(X, y, tss, model_name: str, base_params: dict):
 # Main worker ---------------------------------------------------------------
 # ---------------------------------------------------------------------------
 
-def run(cfg_path: str, input_path: str, n_trials: int, out_dir: Path):
+def run(
+    cfg_path: str,
+    input_path: str,
+    n_trials: int,
+    out_dir: Path,
+    cv_stage: str,
+    cv_override: dict | None = None,
+) -> None:
     logger.info("Config: %s", cfg_path)
     cfg = yaml.safe_load(Path(cfg_path).read_text())
+    if cv_override:
+        cfg["cv"] = {**cfg.get("cv", {}), **cv_override}
+    cfg["cv_stage"] = cv_stage
     df = read_pickle(input_path)
 
     logger.info("Data shape: %s", df.shape)
@@ -132,10 +183,7 @@ def run(cfg_path: str, input_path: str, n_trials: int, out_dir: Path):
     X = drop_by_patterns(X, cfg.get("features_exclude", []))
 
     cv_conf = cfg.get("cv", {})
-    tss_kwargs = {"n_splits": cv_conf.get("n_splits", 3)}
-    if (test_hours := cv_conf.get("test_hours")):
-        tss_kwargs["test_size"] = test_hours
-    tss = TimeSeriesSplit(**tss_kwargs)
+    tss = build_cv(cv_conf)
 
     model_name = cfg.get("model_name", "lgbm")
     base_params = cfg.get("params", {}).copy()
@@ -156,6 +204,16 @@ def run(cfg_path: str, input_path: str, n_trials: int, out_dir: Path):
         yaml.safe_dump(best_params, f)
     joblib.dump(study, out_dir / "study.pkl")
 
+    fs_conf = cfg.get("feature_select", {"mode": "none"})
+    if fs_conf.get("mode") == "optuna":
+        n_fs_trials = fs_conf.get("trials", 30)
+        logger.info("Starting feature selection: %d trials", n_fs_trials)
+        cols = select_features_optuna(X, y, tss, model_name, best_params, n_fs_trials)
+        with open(out_dir / "selected_features.txt", "w") as f:
+            for c in cols:
+                f.write(c + "\n")
+        logger.info("Selected %d features", len(cols))
+
     logger.info("Artifacts saved to %s", out_dir.resolve())
 
 
@@ -173,6 +231,8 @@ def main(cfg: DictConfig):  # noqa: D401
         to_absolute_path(cfg.input),        # training data
         cfg.trials,                         # number of trials
         Path(cfg.out).resolve(),            # output dir inside Hydra run
+        cfg.get("cv_stage", "stage1"),
+        cfg.get("cv", {}),
     )
 
 

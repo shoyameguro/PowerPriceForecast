@@ -1,0 +1,3 @@
+feature_select:
+  mode: optuna
+  trials: 30
