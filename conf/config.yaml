@@ -1,6 +1,7 @@
 # conf/config.yaml
 defaults:
   - _self_
+  - cv_stage1
 
 # -- 学習用ファイルと設定 --
 cfg:   src/config/lgbm_baseline.yaml   # ← 相対パスのまま
