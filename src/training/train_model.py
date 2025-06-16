@@ -87,8 +87,7 @@ def run(cfg_path: str, input_path: str, model_dir: Path, cv_stage: str, cv_overr
     X = drop_by_patterns(X, cfg.get("features_exclude", []))
 
     # 4. CV setup -----------------------------------------------------------
-    cv_conf = cfg.get("cv", {})
-    tss = build_cv(cv_conf)
+    tss = build_cv(cfg["cv"])
 
     # 5. Train folds --------------------------------------------------------
     oof = np.zeros(len(df))
@@ -100,7 +99,7 @@ def run(cfg_path: str, input_path: str, model_dir: Path, cv_stage: str, cv_overr
         raise ValueError(f"Unknown model_name: {model_name}")
 
     model_params = cfg["params"].copy()
-    model_params["early_stopping_rounds"] = cv_conf.get("early_stopping_rounds", 100)
+    model_params["early_stopping_rounds"] = cfg["cv"].get("early_stopping_rounds", 100)
 
     for fold, (tr_idx, val_idx) in enumerate(tss.split(X)):
         if len(tr_idx) == 0:

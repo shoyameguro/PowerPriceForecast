@@ -182,8 +182,7 @@ def run(
     X = df.drop(columns=[target_col])
     X = drop_by_patterns(X, cfg.get("features_exclude", []))
 
-    cv_conf = cfg.get("cv", {})
-    tss = build_cv(cv_conf)
+    tss = build_cv(cfg["cv"])
 
     model_name = cfg.get("model_name", "lgbm")
     base_params = cfg.get("params", {}).copy()
