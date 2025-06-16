@@ -38,6 +38,8 @@ from omegaconf import DictConfig
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import TimeSeriesSplit
 
+from src.utils.cv import PurgedWalkForwardCV
+
 from src.models import MODEL_REGISTRY
 from src.utils.io import read_pickle
 from src.training.train_model import drop_by_patterns
@@ -103,6 +105,8 @@ def make_objective(X, y, tss, model_name: str, base_params: dict):
         params["early_stopping_rounds"] = base_params.get("early_stopping_rounds", 50)
         rmses = []
         for tr_idx, val_idx in tss.split(X):
+            if len(tr_idx) == 0:
+                continue
             model = model_cls(params)
             model.fit(X.iloc[tr_idx], y.iloc[tr_idx], valid=(X.iloc[val_idx], y.iloc[val_idx]))
             preds = model.predict(X.iloc[val_idx])
@@ -119,9 +123,19 @@ def make_objective(X, y, tss, model_name: str, base_params: dict):
 # Main worker ---------------------------------------------------------------
 # ---------------------------------------------------------------------------
 
-def run(cfg_path: str, input_path: str, n_trials: int, out_dir: Path):
+def run(
+    cfg_path: str,
+    input_path: str,
+    n_trials: int,
+    out_dir: Path,
+    cv_stage: str,
+    cv_override: dict | None = None,
+) -> None:
     logger.info("Config: %s", cfg_path)
     cfg = yaml.safe_load(Path(cfg_path).read_text())
+    if cv_override:
+        cfg["cv"] = {**cfg.get("cv", {}), **cv_override}
+    cfg["cv_stage"] = cv_stage
     df = read_pickle(input_path)
 
     logger.info("Data shape: %s", df.shape)
@@ -132,10 +146,18 @@ def run(cfg_path: str, input_path: str, n_trials: int, out_dir: Path):
     X = drop_by_patterns(X, cfg.get("features_exclude", []))
 
     cv_conf = cfg.get("cv", {})
-    tss_kwargs = {"n_splits": cv_conf.get("n_splits", 3)}
-    if (test_hours := cv_conf.get("test_hours")):
-        tss_kwargs["test_size"] = test_hours
-    tss = TimeSeriesSplit(**tss_kwargs)
+    cv_name = cv_conf.get("name", "timeseries")
+    if cv_name == "purged_walk":
+        tss = PurgedWalkForwardCV(
+            n_splits=cv_conf.get("n_splits", 3),
+            test_size=cv_conf.get("test_hours", cv_conf.get("test_size", 0)),
+            gap=cv_conf.get("gap_hours", cv_conf.get("gap", 0)),
+        )
+    else:
+        tss_kwargs = {"n_splits": cv_conf.get("n_splits", 3)}
+        if (test_hours := cv_conf.get("test_hours")):
+            tss_kwargs["test_size"] = test_hours
+        tss = TimeSeriesSplit(**tss_kwargs)
 
     model_name = cfg.get("model_name", "lgbm")
     base_params = cfg.get("params", {}).copy()
@@ -173,6 +195,8 @@ def main(cfg: DictConfig):  # noqa: D401
         to_absolute_path(cfg.input),        # training data
         cfg.trials,                         # number of trials
         Path(cfg.out).resolve(),            # output dir inside Hydra run
+        cfg.get("cv_stage", "stage1"),
+        cfg.get("cv", {}),
     )
 
 

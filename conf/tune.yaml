@@ -1,6 +1,7 @@
 # conf/tune.yaml
 defaults:
   - _self_
+  - cv_stage1
 
 # ---- 対象モデル設定とデータ --------------------------------------------
 cfg: src/config/lgbm_baseline.yaml
