@@ -3,13 +3,12 @@ defaults:
   - _self_
   - cv_stage1
 
-# -- 学習用ファイルと設定 --
-cfg:   src/config/lgbm_baseline.yaml   # ← 相対パスのまま
-input: data/train/train.pkl            # ← 相対パスのまま
+cfg: src/config/lgbm_baseline.yaml
+input: data/train/train.pkl
 
-# run フォルダ内の models/ に出力させる
 model_dir: ${hydra:runtime.output_dir}/models
 
 hydra:
   run:
     dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+
