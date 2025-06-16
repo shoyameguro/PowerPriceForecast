@@ -44,6 +44,44 @@ from src.models import MODEL_REGISTRY
 from src.utils.io import read_pickle
 from src.training.train_model import drop_by_patterns
 
+
+def select_features_optuna(
+    X: pd.DataFrame,
+    y: pd.Series,
+    tss,
+    model_name: str,
+    params: dict,
+    n_trials: int,
+) -> list[str]:
+    """Return list of selected columns via Optuna."""
+    model_cls = MODEL_REGISTRY[model_name]
+    base_model = model_cls(params)
+    base_model.fit(X, y, valid=(X, y))
+    order = base_model.get_importance().sort_values(ascending=False).index.tolist()
+
+    def objective(trial: optuna.Trial) -> float:
+        k = trial.suggest_int("num_features", max(1, len(order) // 10), len(order))
+        cols = order[:k]
+        rmses = []
+        for tr_idx, val_idx in tss.split(X):
+            if len(tr_idx) == 0:
+                continue
+            model = model_cls(params)
+            model.fit(
+                X.loc[tr_idx, cols],
+                y.iloc[tr_idx],
+                valid=(X.loc[val_idx, cols], y.iloc[val_idx]),
+            )
+            preds = model.predict(X.loc[val_idx, cols])
+            rmse = math.sqrt(mean_squared_error(y.iloc[val_idx], preds))
+            rmses.append(rmse)
+        trial.set_user_attr("cols", cols)
+        return float(np.mean(rmses))
+
+    study = optuna.create_study(direction="minimize", study_name="feature_select")
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+    return study.best_trial.user_attrs["cols"]
+
 # ---------------------------------------------------------------------------
 # Logging setup -------------------------------------------------------------
 # ---------------------------------------------------------------------------
@@ -177,6 +215,16 @@ def run(
     with open(out_dir / "best_params.yaml", "w") as f:
         yaml.safe_dump(best_params, f)
     joblib.dump(study, out_dir / "study.pkl")
+
+    fs_conf = cfg.get("feature_select", {"mode": "none"})
+    if fs_conf.get("mode") == "optuna":
+        n_fs_trials = fs_conf.get("trials", 30)
+        logger.info("Starting feature selection: %d trials", n_fs_trials)
+        cols = select_features_optuna(X, y, tss, model_name, best_params, n_fs_trials)
+        with open(out_dir / "selected_features.txt", "w") as f:
+            for c in cols:
+                f.write(c + "\n")
+        logger.info("Selected %d features", len(cols))
 
     logger.info("Artifacts saved to %s", out_dir.resolve())
 

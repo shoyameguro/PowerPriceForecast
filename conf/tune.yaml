@@ -2,6 +2,7 @@
 defaults:
   - _self_
   - cv_stage: stage1
+  - feature_select: none
 
 # ---- 対象モデル設定とデータ --------------------------------------------
 cfg: src/config/lgbm_baseline.yaml

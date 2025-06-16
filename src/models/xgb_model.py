@@ -68,3 +68,9 @@ class XGBWrapper:
         self.categorical_cols = d["categorical_cols"]
         self.cat_maps = d.get("cat_maps", {})
 
+    def get_importance(self, importance_type: str = "gain"):
+        if self.model is None:
+            raise ValueError("Model not trained")
+        score = self.model.get_booster().get_score(importance_type=importance_type)
+        return pd.Series(score).reindex(self.feature_names).fillna(0.0)
+
