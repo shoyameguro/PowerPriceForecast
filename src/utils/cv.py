@@ -4,6 +4,24 @@ from __future__ import annotations
 
 import numpy as np
 from typing import Iterator, Tuple
+from sklearn.model_selection import TimeSeriesSplit
+
+
+def build_cv(cfg: dict):
+    """Return a CV splitter instance from a config dictionary."""
+    cv_name = cfg.get("name", "timeseries")
+    if cv_name == "purged_walk":
+        return PurgedWalkForwardCV(
+            n_splits=cfg.get("n_splits", 3),
+            test_size=cfg.get("test_hours", cfg.get("test_size", 0)),
+            gap=cfg.get("gap_hours", cfg.get("gap", 0)),
+        )
+    if cv_name == "timeseries":
+        kwargs = {"n_splits": cfg.get("n_splits", 3)}
+        if (ts := cfg.get("test_hours")) is not None:
+            kwargs["test_size"] = ts
+        return TimeSeriesSplit(**kwargs)
+    raise ValueError(f"Unknown cv.name: {cv_name}")
 
 
 class PurgedWalkForwardCV:

@@ -26,9 +26,8 @@ import yaml
 from hydra.utils import to_absolute_path
 from omegaconf import DictConfig
 from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import TimeSeriesSplit
 
-from src.utils.cv import PurgedWalkForwardCV
+from src.utils.cv import build_cv
 
 from src.models import MODEL_REGISTRY
 from src.utils.io import read_pickle
@@ -89,18 +88,7 @@ def run(cfg_path: str, input_path: str, model_dir: Path, cv_stage: str, cv_overr
 
     # 4. CV setup -----------------------------------------------------------
     cv_conf = cfg.get("cv", {})
-    cv_name = cv_conf.get("name", "timeseries")
-    if cv_name == "purged_walk":
-        tss = PurgedWalkForwardCV(
-            n_splits=cv_conf.get("n_splits", 3),
-            test_size=cv_conf.get("test_hours", cv_conf.get("test_size", 0)),
-            gap=cv_conf.get("gap_hours", cv_conf.get("gap", 0)),
-        )
-    else:
-        tss_kwargs = {"n_splits": cv_conf.get("n_splits", 3)}
-        if (test_hours := cv_conf.get("test_hours")):
-            tss_kwargs["test_size"] = test_hours  # 1 h = 1 row
-        tss = TimeSeriesSplit(**tss_kwargs)
+    tss = build_cv(cv_conf)
 
     # 5. Train folds --------------------------------------------------------
     oof = np.zeros(len(df))
